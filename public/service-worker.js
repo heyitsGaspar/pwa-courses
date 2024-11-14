@@ -4,7 +4,7 @@
 const CACHE_NAME = 'my-cache-v1';
 const URLsToCache = [
   '/', // Página principal
-  '/index.html', 
+  '/index.html',
   '/main.382215a7.js', // Archivos esenciales
   '/static/js/bundle.js',
   '/static/css/main.css', // Asegúrate de que esta sea la ruta correcta al CSS
@@ -56,8 +56,9 @@ self.addEventListener('fetch', (event) => {
         // Si hay un error en la red (sin conexión), devolver una respuesta fallback
         console.log('Error fetching resource: ', error);
 
-        // Si es un archivo esencial como el CSS, que debería estar en cache, manejamos específicamente
+        // Si es un archivo CSS y no hay conexión, devolver el CSS desde el cache
         if (event.request.url.endsWith('.css')) {
+          console.log('Returning CSS from cache');
           return caches.match('/static/css/main.css'); // Ruta del CSS en caso de error
         }
 
