@@ -1,80 +1,64 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'courses-cache-v2';
-
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png',
-  'https://pwa-api-production-f5fc.up.railway.app/api/courses',
-  // Agrega cualquier otro recurso que necesites cachear aquí
+// Nombre del caché y lista de URLs a cachear
+const CACHE_NAME = 'my-cache-v1';
+const URLsToCache = [
+  '/', // Página principal
+  '/index.html', 
+  '/main.382215a7.js', // Archivos esenciales
+  '/static/js/bundle.js',
+  '/static/css/main.css',
+  '/offline.html', // Página de "offline" para cuando no haya conexión
+  // Agrega otros recursos esenciales aquí
 ];
 
-// Evento de instalación: almacena en caché los recursos especificados
+// Instalar el Service Worker y cachear los archivos
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('Caching app shell');
-      return cache.addAll(urlsToCache);
+      console.log('[Service Worker] Caching essential files');
+      return cache.addAll(URLsToCache);
     })
   );
 });
 
-// Evento de activación: elimina cachés antiguas que ya no son necesarias
+// Activar el Service Worker
+// Activar el Service Worker
 self.addEventListener('activate', (event) => {
+  const cacheWhitelist = [CACHE_NAME];
+
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        // eslint-disable-next-line array-callback-return
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('Deleting old cache:', cache);
-            return caches.delete(cache);
+        cacheNames.map((cacheName) => {
+          if (!cacheWhitelist.includes(cacheName)) {
+            // Eliminar cachés antiguos no necesarios
+            console.log('[Service Worker] Deleting old cache', cacheName);
+            return caches.delete(cacheName);  // Devolver la promesa de eliminación
           }
+          return Promise.resolve(); // Si el caché está en la whitelist, devolver una promesa resuelta
         })
       );
     })
   );
 });
 
-// Evento de fetch: maneja las solicitudes y excluye URLs no necesarias
+
+// Interceptar las solicitudes de red y devolver las respuestas desde el cache cuando no hay conexión
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Excluir rutas de Vercel y otras URLs no relevantes
-  if (url.origin === 'https://vercel.live' || url.pathname.startsWith('/.well-known/vercel')) {
-    return;
-  }
-
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return (
-        response ||
-        fetch(event.request)
-          .then((networkResponse) => {
-            // Solo almacena en caché respuestas JavaScript y HTML exitosas
-            if (
-              networkResponse &&
-              networkResponse.status === 200 &&
-              (networkResponse.headers.get('Content-Type').includes('application/javascript') ||
-               networkResponse.headers.get('Content-Type').includes('text/html'))
-            ) {
-              const responseClone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, responseClone);
-              });
-            }
-            return networkResponse;
-          })
-          .catch((error) => {
-            console.error('Error fetching resource:', error);
-            // Devuelve la página de inicio en caso de error
-            return caches.match('/index.html');
-          })
-      );
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        // Si hay una respuesta cacheada, devolverla
+        return cachedResponse;
+      }
+
+      // Si no hay una respuesta cacheada, hacer la solicitud de red
+      return fetch(event.request).catch((error) => {
+        // Si hay un error en la red (sin conexión), devolver una respuesta fallback
+        console.log('Error fetching resource: ', error);
+        return caches.match('/offline.html'); // Asegúrate de tener una página de offline
+      });
     })
   );
 });
