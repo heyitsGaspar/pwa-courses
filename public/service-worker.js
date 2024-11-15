@@ -1,70 +1,65 @@
 /* eslint-disable no-restricted-globals */
 
-// Nombre del caché y lista de URLs a cachear
-const CACHE_NAME = 'my-cache-v1';
-const URLsToCache = [
-  '/', // Página principal
-  '/index.html',
-  '/main.382215a7.js', // Archivos esenciales
-  '/static/js/bundle.js',
-  '/static/css/main.css', // Asegúrate de que esta sea la ruta correcta al CSS
-  '/offline.html', // Página de "offline" para cuando no haya conexión
-  // Agrega otros recursos esenciales aquí
+const CACHE_NAME = "my-cache-v1";
+
+const urlsToCache = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/favicon.ico",
+  "/logo192.png",
+  "/logo512.png",
+  "/static", // Agrega cualquier otro recurso que necesites cachear aquí
 ];
 
-// Instalar el Service Worker y cachear los archivos
-self.addEventListener('install', (event) => {
+// Evento de instalación: almacena en caché los recursos especificados
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching essential files');
-      return cache.addAll(URLsToCache);
+      console.log("Caching app shell");
+      return cache.addAll(urlsToCache);
     })
   );
 });
 
-// Activar el Service Worker
-self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
-
+// Evento de activación: elimina cachés antiguas que ya no son necesarias
+self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (!cacheWhitelist.includes(cacheName)) {
-            // Eliminar cachés antiguos no necesarios
-            console.log('[Service Worker] Deleting old cache', cacheName);
-            return caches.delete(cacheName);  // Devolver la promesa de eliminación
+        // eslint-disable-next-line array-callback-return
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log("Deleting old cache:", cache);
+            return caches.delete(cache);
           }
-          return Promise.resolve(); // Si el caché está en la whitelist, devolver una promesa resuelta
         })
       );
     })
   );
 });
 
-// Interceptar las solicitudes de red y devolver las respuestas desde el cache cuando no hay conexión
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Si hay una respuesta cacheada, devolverla
-        return cachedResponse;
-      }
-
-      // Si no hay una respuesta cacheada, hacer la solicitud de red
-      return fetch(event.request).catch((error) => {
-        // Si hay un error en la red (sin conexión), devolver una respuesta fallback
-        console.log('Error fetching resource: ', error);
-
-        // Si es un archivo CSS y no hay conexión, devolver el CSS desde el cache
-        if (event.request.url.endsWith('.css')) {
-          console.log('Returning CSS from cache');
-          return caches.match('/static/css/main.css'); // Ruta del CSS en caso de error
-        }
-
-        // Para otros recursos, devolver la página offline
-        return caches.match('/offline.html');
-      });
-    })
-  );
+self.addEventListener("fetch", (event) => {
+  // Asegúrate de que la solicitud es 'GET', está en la carpeta 'static', y usa 'http' o 'https'
+  const isValidRoute =
+    event.request.url.includes("/static/") ||
+    event.request.url.startsWith("http://") ||
+    event.request.url.startsWith("https://");
+  if (event.request.method === "GET" && isValidRoute) {
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        // Si el recurso está en caché, lo devuelve, de lo contrario, realiza la solicitud de red
+        return (
+          response ||
+          fetch(event.request).then((fetchResponse) => {
+            // Clona la respuesta y almacénala en caché
+            return caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, fetchResponse.clone());
+              return fetchResponse;
+            });
+          })
+        );
+      })
+    );
+  }
 });
